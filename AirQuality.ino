@@ -1,6 +1,5 @@
 #include <DHT.h>
 #include <LiquidCrystal.h>
-// #include "Lcd.cpp"
 #include "TempAndHumidity.cpp"
 
 DHT dht;
@@ -12,7 +11,7 @@ const int TEMP_PIN = 0;
 const int BUTTON_PIN = 12;
 const int SUPPLY_VOLTAGE = 5;
 const int BOOTING_TIME = 2000;
-const String celciusDegree = String((char)223) + 'C';
+const String CELCIUS_SYMBOL = String((char)223) + 'C';
 
 int buttonPrev = LOW;
 bool a = 0;
@@ -62,7 +61,7 @@ void loop() {
     previousMillisLcd = currentMillis;
 
     lcd.setCursor(0, 0 - a);
-    lcd.print(String(avgTemp, 1) + celciusDegree + " " + tempAndHumidity.evalTempStatus(avgTemp));
+    lcd.print(String(avgTemp, 1) + CELCIUS_SYMBOL + " " + tempAndHumidity.evalTempStatus(avgTemp));
     lcd.setCursor(0, 1 - a);
     lcd.print(String(avgHum) + "%    " + tempAndHumidity.evalHumStatus(avgHum));
   }
