@@ -2,73 +2,44 @@
 
 using namespace std;
 
+static const int QUEUE_SIZE = 10;
+
 class TempAndHumidity {
 private:
-  static const int humTableSize = 10;
-  static const int tempTableSize = 10;
-  int humTable[humTableSize] = {};
-  float tempTable[tempTableSize] = {};
+  float temperatureArray[QUEUE_SIZE] = {};
+  float humidityArray[QUEUE_SIZE] = {};
 
-  float calculateAvgTemp() {
+  float calculateAvg(float sensorValues[]) {
     float sum = 0;
-    int nonZeroCount = 0;
-    for (int i = 0; i < tempTableSize; i++) {
-      sum += tempTable[i];
-      if (tempTable[i] != 0) {
-        nonZeroCount++;
-      }
+    for (int i = 0; i < QUEUE_SIZE; i++) {
+      sum += sensorValues[i];
     }
-    if (nonZeroCount == 0) {
-      return 0;
-    }
-    return sum / nonZeroCount;
+    return sum / QUEUE_SIZE;
   }
 
-  int calculateHumAvg() {
-    int sum = 0;
-    int nonZeroCount = 0;
-    for (int i = 0; i < humTableSize; i++) {
-      sum += humTable[i];
-      if (humTable[i] != 0) {
-        nonZeroCount++;
-      }
+  float * pushToQueue(float * sensorValues, float currentSensorValue) {
+    for (int i = 0; i < QUEUE_SIZE - 1; i++) {
+      sensorValues[i] = sensorValues[i + 1];
     }
-    if (nonZeroCount == 0) {
-      return 0;
-    }
-    return sum / nonZeroCount;
-  }
+    sensorValues[QUEUE_SIZE - 1] = currentSensorValue;
 
-  void pushToTempArray(float temp) {
-    for (int i = 0; i < tempTableSize - 1; i++) {
-      tempTable[i] = tempTable[i + 1];
-    }
-    tempTable[tempTableSize - 1] = temp;
-  }
-
-  void pushToHumArray(int hum) {
-    if (hum == 0) {
-      return;
-    }
-
-    for (int i = 0; i < humTableSize - 1; i++) {
-      humTable[i] = humTable[i + 1];
-    }
-    humTable[humTableSize - 1] = hum;
+    return sensorValues;
   }
 
 public:
   float calculateAvgTemp(float temp) {
-    pushToTempArray(temp);
-    return calculateAvgTemp();
+    pushToQueue(temperatureArray, temp);
+
+    return calculateAvg(temperatureArray);
   }
 
-  int calculateHumidity(int hum) {
-    pushToHumArray(hum);
-    return calculateHumAvg();
+  float calculateAvgHumidity(float humidity) {
+    pushToQueue(humidityArray, humidity);
+
+    return calculateAvg(humidityArray);
   }
 
-  String evalTempStatus(float temp) {
+  String getTemperatureDescription(float temp) {
     if (temp < 14) {
       return "Too cold";
     }
@@ -84,7 +55,7 @@ public:
     return "Too warm";
   }
 
-  String evalHumStatus(int hum) {
+  String getHumidityDescription(float hum) {
     if (hum < 30) {
       return "Too dry";
     }
