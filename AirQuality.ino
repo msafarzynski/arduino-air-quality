@@ -1,8 +1,25 @@
+#include <i2c.h>
+#include <sensirion_common.h>
+#include <sensirion_configuration.h>
+#include <sgp30.h>
+#include <sgp_featureset.h>
+
 #include <DHT.h>
 #include <LiquidCrystal.h>
 #include <Seeed_HM330X.h>
 
 #include "TempAndHumidity.cpp"
+
+#ifdef ARDUINO_SAMD_VARIANT_COMPLIANCE
+#define SERIAL_OUTPUT SerialUSB
+#else
+#define SERIAL_OUTPUT Serial
+#endif
+
+#define LCD_SCROLLS 4
+#define BOOT_TIME 2000
+#define HUM_PIN 11
+#define BUTTON_PIN 12
 
 typedef enum {
   SENSOR_NUM = 1,
@@ -14,30 +31,20 @@ typedef enum {
   PM10 = 7
 } PM_READING;
 
+struct GasReading {
+    uint16_t co2;
+    uint16_t tvoc;
+}; 
+
 DHT dht;
 LiquidCrystal lcd(2, 3, 4, 5, 6, 7);
-HM330X sensor;
+HM330X particleSensor;
 TempAndHumidity tempAndHumidity;
-
-const int HUM_PIN = 11;
-const int TEMP_PIN = 0;
-const int BUTTON_PIN = 12;
-const int SUPPLY_VOLTAGE = 5;
-const int BOOT_TIME = 2000;
-const int LCD_REFRESH_RATE = 500;
-const int LCD_SCROLLS = 3;
-const char CELCIUS_SYMBOL = (char)223;
 
 int buttonPrev = LOW;
 int currentScrollLine = 0;
 unsigned long previousMillisSensors = 0;
 unsigned long previousMillisLcd = 0;
-
-#ifdef ARDUINO_SAMD_VARIANT_COMPLIANCE
-#define SERIAL_OUTPUT SerialUSB
-#else
-#define SERIAL_OUTPUT Serial
-#endif
 
 uint8_t buf[30];
 const char* str[] = {
@@ -55,6 +62,8 @@ void setup() {
   // SERIAL_OUTPUT.begin(9600);
   dht.setup(HUM_PIN, dht.DHT22);
   lcd.begin(16, 3);
+  setupGasSensor();
+
   pinMode(BUTTON_PIN, INPUT);
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
@@ -62,7 +71,7 @@ void setup() {
   SERIAL_OUTPUT.begin(115200);
   delay(100);
   SERIAL_OUTPUT.println("Serial start");
-  if (sensor.init()) {
+  if (particleSensor.init()) {
     SERIAL_OUTPUT.println("HM330X init failed!!");
     while (1)
       ;
@@ -75,11 +84,16 @@ void loop() {
   float avgTemperature;
   float humidity;
   float avgHumidity;
-  String temperatureDesc = tempAndHumidity.getTemperatureDescription(avgTemperature);
-  String humidityDesc = tempAndHumidity.getHumidityDescription(avgHumidity);
   uint16_t pm1;
   uint16_t pm2_5;
   uint16_t pm10;
+  char CELCIUS_SYMBOL = (char)223;
+
+
+  String temperatureDesc = tempAndHumidity.getTemperatureDescription(avgTemperature);
+  String humidityDesc = tempAndHumidity.getHumidityDescription(avgHumidity);
+  GasReading gasReading = readGasSensor();
+
 
   if (currentMillis < BOOT_TIME) {
     lcd.clear();
@@ -99,7 +113,7 @@ void loop() {
     avgHumidity = tempAndHumidity.calculateAvgHumidity(humidity);
     humidityDesc = tempAndHumidity.getHumidityDescription(avgHumidity);
 
-    if (sensor.read_sensor_value(buf, 29)) {
+    if (particleSensor.read_sensor_value(buf, 29)) {
       SERIAL_OUTPUT.println("HM330X read result failed!!");
     }
     parse_result_value(buf);
@@ -135,6 +149,11 @@ void loop() {
     lcd.print((String) "PM2.5: " + pm2_5 + "ug/m3");
     lcd.setCursor(0, 4 - 2*currentScrollLine);
     lcd.print((String) "PM10: " + pm10 + "ug/m3");
+    
+    lcd.setCursor(0, 6 - 2*currentScrollLine);
+    lcd.print((String) "CO2: " + gasReading.co2 + "ppm");
+    lcd.setCursor(0, 7 - 2*currentScrollLine);
+    lcd.print((String) "PM10: " + gasReading.tvoc + "ppb");
   }
 
   evalScrollButton();
@@ -152,55 +171,3 @@ void evalScrollButton() {
   buttonPrev = buttonState;
 }
 
-HM330XErrorCode print_result(const char* str, uint16_t value) {
-  if (NULL == str) {
-    return ERROR_PARAM;
-  }
-  SERIAL_OUTPUT.print(str);
-  SERIAL_OUTPUT.println(value);
-  return NO_ERROR;
-}
-
-/*parse buf with 29 uint8_t-data*/
-HM330XErrorCode parse_result(uint8_t* data) {
-  uint16_t value = 0;
-  if (NULL == data) {
-    return ERROR_PARAM;
-  }
-  for (int i = 1; i < 8; i++) {
-    value = (uint16_t)data[i * 2] << 8 | data[i * 2 + 1];
-    print_result(str[i - 1], value);
-  }
-
-  return NO_ERROR;
-}
-
-uint16_t getPmReading(uint8_t* data, int pmReading) {
-  if (NULL == data) {
-    return ERROR_PARAM;
-  }
-
-  return (uint16_t)data[pmReading * 2] << 8 | data[pmReading * 2 + 1];
-}
-
-HM330XErrorCode parse_result_value(uint8_t* data) {
-  if (NULL == data) {
-    return ERROR_PARAM;
-  }
-  for (int i = 0; i < 28; i++) {
-    SERIAL_OUTPUT.print(data[i], HEX);
-    SERIAL_OUTPUT.print("  ");
-    if ((0 == (i) % 5) || (0 == i)) {
-      SERIAL_OUTPUT.println("");
-    }
-  }
-  uint8_t sum = 0;
-  for (int i = 0; i < 28; i++) {
-    sum += data[i];
-  }
-  if (sum != data[28]) {
-    SERIAL_OUTPUT.println("wrong checkSum!!");
-  }
-  SERIAL_OUTPUT.println("");
-  return NO_ERROR;
-}
